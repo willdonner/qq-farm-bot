@@ -85,77 +85,95 @@
       </el-col>
     </el-row>
 
-    <!-- 详细数据表格 -->
-    <el-card shadow="never" class="table-card">
-      <template #header>
-        <div class="card-title">分时详细记录</div>
-      </template>
-      <el-table :data="reversedStatsData" style="width: 100%" stripe height="350" size="large">
-        <el-table-column prop="hour" label="时间" width="160">
-          <template #default="scope">
-            <el-tag type="info" effect="plain">{{ formatTimeFull(scope.row.hour) }}</el-tag>
+    <!-- 排行榜与分时明细区 -->
+    <el-row :gutter="20" class="data-row">
+      <!-- 偷菜排行榜 -->
+      <el-col :span="8">
+        <el-card shadow="never" class="table-card rank-card">
+          <template #header>
+            <div class="card-title" style="color: #f56c6c;">
+              <el-icon><Scissor /></el-icon> 谁最受关注 (被偷榜)
+            </div>
           </template>
-        </el-table-column>
-        
-        <el-table-column label="收菜明细 (Harvest)" align="center">
-          <el-table-column prop="harvest.amount" label="数量" width="120" align="center">
-            <template #default="scope">
-              <el-popover v-if="scope.row.harvest.details && scope.row.harvest.details.length" placement="top" title="获得作物清单" width="220" trigger="hover" effect="dark">
-                <template #reference>
-                  <span class="hover-number text-success">{{ scope.row.harvest.amount }}</span>
-                </template>
-                <div v-for="item in scope.row.harvest.details" :key="item.name" class="popover-item">
-                  <span class="crop-name">{{ item.name }} x{{ item.amount }}</span>
-                  <span class="crop-gold">💰{{ item.gold }}</span>
-                </div>
-              </el-popover>
-              <span v-else class="empty-number">-</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="harvest.gold" label="收益" width="120" align="center">
-            <template #default="scope">
-              <span v-if="scope.row.harvest.gold > 0" class="gold-text">+{{ scope.row.harvest.gold }}</span>
-              <span v-else class="empty-number">-</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="harvest.count" label="批次" width="100" align="center">
-            <template #default="scope">
-              <span v-if="scope.row.harvest.count > 0">{{ scope.row.harvest.count }}</span>
-              <span v-else class="empty-number">-</span>
-            </template>
-          </el-table-column>
-        </el-table-column>
+          <el-table :data="stealRankings" style="width: 100%" height="350" size="small">
+            <el-table-column type="index" label="排名" width="55" align="center">
+              <template #default="scope">
+                <div :class="['rank-badge', `rank-${scope.$index + 1}`]">{{ scope.$index + 1 }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="name" label="好友" show-overflow-tooltip></el-table-column>
+            <el-table-column prop="amount" label="被偷(个)" width="80" align="center"></el-table-column>
+            <el-table-column prop="gold" label="榨取价值" width="100" align="right">
+              <template #default="scope">
+                <span class="rank-gold">💰{{ scope.row.gold }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
 
-        <el-table-column label="偷菜明细 (Steal)" align="center">
-          <el-table-column prop="steal.amount" label="数量" width="120" align="center">
-            <template #default="scope">
-              <el-popover v-if="scope.row.steal.details && scope.row.steal.details.length" placement="top" title="战利品清单" width="250" trigger="hover" effect="dark">
-                <template #reference>
-                  <span class="hover-number text-danger">{{ scope.row.steal.amount }}</span>
+      <!-- 详细数据表格 -->
+      <el-col :span="16">
+        <el-card shadow="never" class="table-card">
+          <template #header>
+            <div class="card-title">分时详细记录</div>
+          </template>
+          <el-table :data="reversedStatsData" style="width: 100%" stripe height="350" size="small">
+            <el-table-column prop="hour" label="时间" width="130">
+              <template #default="scope">
+                <el-tag type="info" effect="plain" size="small">{{ formatTimeFull(scope.row.hour) }}</el-tag>
+              </template>
+            </el-table-column>
+            
+            <el-table-column label="自己收菜" align="center">
+              <el-table-column prop="harvest.amount" label="数量" width="80" align="center">
+                <template #default="scope">
+                  <el-popover v-if="scope.row.harvest.details && scope.row.harvest.details.length" placement="top" title="获得作物" width="220" trigger="hover" effect="dark">
+                    <template #reference>
+                      <span class="hover-number text-success">{{ scope.row.harvest.amount }}</span>
+                    </template>
+                    <div v-for="item in scope.row.harvest.details" :key="item.name" class="popover-item">
+                      <span class="crop-name">{{ item.name }} x{{ item.amount }}</span>
+                      <span class="crop-gold">💰{{ item.gold }}</span>
+                    </div>
+                  </el-popover>
+                  <span v-else class="empty-number">-</span>
                 </template>
-                <div v-for="item in scope.row.steal.details" :key="item.name" class="popover-item">
-                  <span class="crop-name">{{ item.name }} x{{ item.amount }}</span>
-                  <span class="crop-gold">💰{{ item.gold }}</span>
-                </div>
-              </el-popover>
-              <span v-else class="empty-number">-</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="steal.gold" label="收益" width="120" align="center">
-            <template #default="scope">
-              <span v-if="scope.row.steal.gold > 0" class="gold-text">+{{ scope.row.steal.gold }}</span>
-              <span v-else class="empty-number">-</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="steal.count" label="出手次数" width="100" align="center">
-            <template #default="scope">
-              <span v-if="scope.row.steal.count > 0">{{ scope.row.steal.count }}</span>
-              <span v-else class="empty-number">-</span>
-            </template>
-          </el-table-column>
-        </el-table-column>
-      </el-table>
-    </el-card>
+              </el-table-column>
+              <el-table-column prop="harvest.gold" label="收益" width="90" align="center">
+                <template #default="scope">
+                  <span v-if="scope.row.harvest.gold > 0" class="gold-text">+{{ scope.row.harvest.gold }}</span>
+                  <span v-else class="empty-number">-</span>
+                </template>
+              </el-table-column>
+            </el-table-column>
+
+            <el-table-column label="外头偷菜" align="center">
+              <el-table-column prop="steal.amount" label="数量" width="80" align="center">
+                <template #default="scope">
+                  <el-popover v-if="scope.row.steal.details && scope.row.steal.details.length" placement="top" title="战利品" width="220" trigger="hover" effect="dark">
+                    <template #reference>
+                      <span class="hover-number text-danger">{{ scope.row.steal.amount }}</span>
+                    </template>
+                    <div v-for="item in scope.row.steal.details" :key="item.name" class="popover-item">
+                      <span class="crop-name">{{ item.name }} x{{ item.amount }}</span>
+                      <span class="crop-gold">💰{{ item.gold }}</span>
+                    </div>
+                  </el-popover>
+                  <span v-else class="empty-number">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="steal.gold" label="收益" width="90" align="center">
+                <template #default="scope">
+                  <span v-if="scope.row.steal.gold > 0" class="gold-text">+{{ scope.row.steal.gold }}</span>
+                  <span v-else class="empty-number">-</span>
+                </template>
+              </el-table-column>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -221,6 +239,27 @@ const summary = computed(() => {
       sg += row.steal.gold || 0;
    })
    return { harvestAmount: ha, harvestGold: hg, stealAmount: sa, stealGold: sg };
+})
+
+// 计算偷菜排行榜
+const stealRankings = computed(() => {
+  const userMap = {};
+  statsData.value.forEach(row => {
+     (row.steal.details || []).forEach(d => {
+        // "好友A: 白萝卜" -> 提取 "好友A"
+        let userName = d.name;
+        if (d.name.includes(': ')) {
+           userName = d.name.split(': ')[0];
+        }
+        if (!userMap[userName]) {
+           userMap[userName] = { name: userName, amount: 0, gold: 0 };
+        }
+        userMap[userName].amount += (d.amount || 0);
+        userMap[userName].gold += (d.gold || 0);
+     });
+  });
+  // 按提取的金币价值降序排列
+  return Object.values(userMap).sort((a,b) => b.gold - a.gold);
 })
 
 // 趋势图表配置
@@ -458,13 +497,37 @@ watch(() => props.uin, () => {
   display: inline-block;
   min-width: 30px;
 }
+.rank-card {
+  height: 100%;
+}
+.rank-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  line-height: 24px;
+  text-align: center;
+  font-weight: bold;
+  background: #f4f4f5;
+  color: #909399;
+  display: inline-block;
+  font-size: 13px;
+}
+.rank-1 { background: #fdf6ec; color: #e6a23c; font-size: 15px; }
+.rank-2 { background: #fdf6ec; color: #f3a683; font-size: 14px; }
+.rank-3 { background: #fdf6ec; color: #f5cd79; font-size: 14px; }
+.rank-gold {
+  color: #e6a23c;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 14px;
+}
 .gold-text {
   font-family: monospace;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: bold;
   color: #e6a23c;
   background: #fdf6ec;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-radius: 6px;
 }
 .empty-number {
