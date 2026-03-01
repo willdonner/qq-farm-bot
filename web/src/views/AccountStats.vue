@@ -1,0 +1,499 @@
+<template>
+  <div class="account-stats-modern" v-loading="loading">
+    <div class="header">
+      <div class="title-group">
+        <el-icon class="title-icon"><DataLine /></el-icon>
+        <h2>统计仪表盘</h2>
+        <span class="subtitle">过去24小时您的农场经营明细</span>
+      </div>
+      <el-button type="primary" :icon="Refresh" @click="fetchData" round>刷新数据</el-button>
+    </div>
+
+    <!-- 顶部数据卡片 -->
+    <el-row :gutter="20" class="summary-cards">
+      <el-col :span="6">
+        <el-card shadow="hover" class="stat-card">
+          <div class="stat-content">
+            <div class="info">
+              <div class="label">累计收菜数量</div>
+              <div class="value text-success">{{ summary.harvestAmount }} <span class="unit">个</span></div>
+            </div>
+            <div class="icon-wrap bg-success-light">
+              <el-icon class="text-success"><Apple /></el-icon>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="stat-card">
+          <div class="stat-content">
+            <div class="info">
+              <div class="label">收菜总收益</div>
+              <div class="value text-warning">{{ summary.harvestGold }} <span class="unit">金币</span></div>
+            </div>
+            <div class="icon-wrap bg-warning-light">
+              <el-icon class="text-warning"><Coin /></el-icon>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="stat-card">
+          <div class="stat-content">
+            <div class="info">
+              <div class="label">累计偷菜数量</div>
+              <div class="value text-danger">{{ summary.stealAmount }} <span class="unit">个</span></div>
+            </div>
+            <div class="icon-wrap bg-danger-light">
+              <el-icon class="text-danger"><Scissor /></el-icon>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="stat-card">
+          <div class="stat-content">
+            <div class="info">
+              <div class="label">偷菜总收益</div>
+              <div class="value text-warning">{{ summary.stealGold }} <span class="unit">金币</span></div>
+            </div>
+            <div class="icon-wrap bg-warning-light">
+              <el-icon class="text-warning"><Trophy /></el-icon>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 图表区 -->
+    <el-row :gutter="20" class="charts-row">
+      <el-col :span="16">
+        <el-card shadow="never" class="chart-card">
+          <template #header>
+            <div class="card-title">收益趋势图</div>
+          </template>
+          <v-chart class="trend-chart" :option="trendChartOption" autoresize />
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card shadow="never" class="chart-card">
+          <template #header>
+            <div class="card-title">作物收益占比 (Top 排行)</div>
+          </template>
+          <v-chart class="pie-chart" :option="pieChartOption" autoresize />
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 详细数据表格 -->
+    <el-card shadow="never" class="table-card">
+      <template #header>
+        <div class="card-title">分时详细记录</div>
+      </template>
+      <el-table :data="reversedStatsData" style="width: 100%" stripe height="350" size="large">
+        <el-table-column prop="hour" label="时间" width="160">
+          <template #default="scope">
+            <el-tag type="info" effect="plain">{{ formatTimeFull(scope.row.hour) }}</el-tag>
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="收菜明细 (Harvest)" align="center">
+          <el-table-column prop="harvest.amount" label="数量" width="120" align="center">
+            <template #default="scope">
+              <el-popover v-if="scope.row.harvest.details && scope.row.harvest.details.length" placement="top" title="获得作物清单" width="220" trigger="hover" effect="dark">
+                <template #reference>
+                  <span class="hover-number text-success">{{ scope.row.harvest.amount }}</span>
+                </template>
+                <div v-for="item in scope.row.harvest.details" :key="item.name" class="popover-item">
+                  <span class="crop-name">{{ item.name }} x{{ item.amount }}</span>
+                  <span class="crop-gold">💰{{ item.gold }}</span>
+                </div>
+              </el-popover>
+              <span v-else class="empty-number">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="harvest.gold" label="收益" width="120" align="center">
+            <template #default="scope">
+              <span v-if="scope.row.harvest.gold > 0" class="gold-text">+{{ scope.row.harvest.gold }}</span>
+              <span v-else class="empty-number">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="harvest.count" label="批次" width="100" align="center">
+            <template #default="scope">
+              <span v-if="scope.row.harvest.count > 0">{{ scope.row.harvest.count }}</span>
+              <span v-else class="empty-number">-</span>
+            </template>
+          </el-table-column>
+        </el-table-column>
+
+        <el-table-column label="偷菜明细 (Steal)" align="center">
+          <el-table-column prop="steal.amount" label="数量" width="120" align="center">
+            <template #default="scope">
+              <el-popover v-if="scope.row.steal.details && scope.row.steal.details.length" placement="top" title="战利品清单" width="250" trigger="hover" effect="dark">
+                <template #reference>
+                  <span class="hover-number text-danger">{{ scope.row.steal.amount }}</span>
+                </template>
+                <div v-for="item in scope.row.steal.details" :key="item.name" class="popover-item">
+                  <span class="crop-name">{{ item.name }} x{{ item.amount }}</span>
+                  <span class="crop-gold">💰{{ item.gold }}</span>
+                </div>
+              </el-popover>
+              <span v-else class="empty-number">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="steal.gold" label="收益" width="120" align="center">
+            <template #default="scope">
+              <span v-if="scope.row.steal.gold > 0" class="gold-text">+{{ scope.row.steal.gold }}</span>
+              <span v-else class="empty-number">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="steal.count" label="出手次数" width="100" align="center">
+            <template #default="scope">
+              <span v-if="scope.row.steal.count > 0">{{ scope.row.steal.count }}</span>
+              <span v-else class="empty-number">-</span>
+            </template>
+          </el-table-column>
+        </el-table-column>
+      </el-table>
+    </el-card>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { getAccountStatistics } from '../api/index.js'
+import { ElMessage } from 'element-plus'
+import { DataLine, Refresh, Apple, Coin, Scissor, Trophy } from '@element-plus/icons-vue'
+
+// 引入 ECharts 核心与 vue-echarts
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
+import VChart from 'vue-echarts'
+
+// 注册必须的基础组件
+use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent])
+
+const props = defineProps({ uin: String })
+const loading = ref(false)
+const statsData = ref([])
+
+// 获取数据
+async function fetchData() {
+  if (!props.uin) return
+  loading.value = true
+  try {
+    const res = await getAccountStatistics(props.uin, 24)
+    if (res.ok) {
+      statsData.value = res.data || []
+    }
+  } catch (e) {
+    ElMessage.error('获取统计数据失败: ' + e.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 格式化函数
+function formatTime(hourStr) {
+  if (!hourStr) return ''
+  return hourStr.substring(11, 16) // "2023-10-25 14:00:00" -> "14:00"
+}
+
+function formatTimeFull(hourStr) {
+  if (!hourStr) return ''
+  return hourStr.substring(5, 16) // "10-25 14:00"
+}
+
+// 为了阅读友好，表格逆序（最新在上面）
+const reversedStatsData = computed(() => {
+  return [...statsData.value].reverse();
+})
+
+// 计算汇总数据
+const summary = computed(() => {
+   let ha = 0, hg = 0, sa = 0, sg = 0;
+   statsData.value.forEach(row => {
+      ha += row.harvest.amount || 0;
+      hg += row.harvest.gold || 0;
+      sa += row.steal.amount || 0;
+      sg += row.steal.gold || 0;
+   })
+   return { harvestAmount: ha, harvestGold: hg, stealAmount: sa, stealGold: sg };
+})
+
+// 趋势图表配置
+const trendChartOption = computed(() => {
+  const hours = statsData.value.map(row => formatTime(row.hour));
+  const stealGolds = statsData.value.map(row => row.steal.gold || 0);
+  const harvestGolds = statsData.value.map(row => row.harvest.gold || 0);
+  
+  return {
+    tooltip: { 
+      trigger: 'axis',
+      axisPointer: { type: 'cross' }
+    },
+    legend: { data: ['自己收菜', '外头偷菜'], top: '0%' },
+    grid: { left: '3%', right: '4%', bottom: '5%', containLabel: true },
+    xAxis: { 
+      type: 'category', 
+      boundaryGap: false, 
+      data: hours,
+      axisLabel: { color: '#888' },
+      axisLine: { lineStyle: { color: '#eee' } }
+    },
+    yAxis: { 
+      type: 'value', 
+      name: '金币收益',
+      splitLine: { lineStyle: { type: 'dashed', color: '#eee' } }
+    },
+    color: ['#67c23a', '#f56c6c'],
+    series: [
+      {
+        name: '自己收菜',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        areaStyle: {
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{ offset: 0, color: 'rgba(103,194,58,0.5)' }, { offset: 1, color: 'rgba(103,194,58,0.05)' }]
+          }
+        },
+        data: harvestGolds
+      },
+      {
+        name: '外头偷菜',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        areaStyle: {
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{ offset: 0, color: 'rgba(245,108,108,0.5)' }, { offset: 1, color: 'rgba(245,108,108,0.05)' }]
+          }
+        },
+        data: stealGolds
+      }
+    ]
+  }
+})
+
+// 饼图配置
+const pieChartOption = computed(() => {
+  const cropMap = {};
+  let totalGold = 0;
+  statsData.value.forEach(row => {
+     (row.harvest.details || []).forEach(d => {
+        cropMap[d.name] = (cropMap[d.name] || 0) + (d.gold || 0);
+        totalGold += d.gold || 0;
+     });
+     (row.steal.details || []).forEach(d => {
+        // 去除名字里的好友前缀 (例如 "张三: 白萝卜" -> "白萝卜")
+        let name = d.name.includes(': ') ? d.name.split(': ')[1] : d.name;
+        cropMap[name] = (cropMap[name] || 0) + (d.gold || 0);
+        totalGold += d.gold || 0;
+     });
+  });
+
+  if (totalGold === 0) {
+    return {
+      title: { text: '暂无收益', left: 'center', top: 'center', textStyle: { color: '#ccc', fontSize: 14 } }
+    };
+  }
+
+  const sorted = Object.keys(cropMap).map(k => ({ name: k, value: cropMap[k] })).sort((a,b)=>b.value - a.value);
+  // 只展示 top 5, 其他归为“其他”
+  let topCrops = sorted.slice(0, 5);
+  if (sorted.length > 5) {
+     const otherValue = sorted.slice(5).reduce((acc, cur) => acc + cur.value, 0);
+     topCrops.push({ name: '其他', value: otherValue });
+  }
+  
+  return {
+    tooltip: { trigger: 'item', formatter: '{b} <br/> {c} 金币 ({d}%)' },
+    legend: { orient: 'horizontal', bottom: '0%' },
+    series: [
+      {
+        name: '收益来源',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
+        itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+        label: { show: false, position: 'center' },
+        emphasis: { label: { show: true, fontSize: 18, fontWeight: 'bold' } },
+        labelLine: { show: false },
+        data: topCrops
+      }
+    ]
+  }
+})
+
+onMounted(() => {
+  fetchData()
+})
+
+watch(() => props.uin, () => {
+  fetchData()
+})
+</script>
+
+<style scoped>
+.account-stats-modern {
+  padding: 24px;
+  background: #f5f7fa;
+  min-height: calc(100vh - 60px);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.title-icon {
+  font-size: 28px;
+  color: #409eff;
+  background: #ecf5ff;
+  padding: 8px;
+  border-radius: 12px;
+}
+.title-group h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #303133;
+}
+.title-group .subtitle {
+  color: #909399;
+  font-size: 14px;
+  margin-left: 8px;
+  margin-top: 6px;
+}
+
+/* 统计卡片 */
+.summary-cards {
+  margin-bottom: 24px;
+}
+.stat-card {
+  border-radius: 16px;
+  border: none;
+  transition: transform 0.3s;
+}
+.stat-card:hover {
+  transform: translateY(-5px);
+}
+.stat-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.info .label {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+.info .value {
+  font-size: 28px;
+  font-weight: 700;
+}
+.info .unit {
+  font-size: 14px;
+  font-weight: normal;
+  color: #909399;
+}
+.icon-wrap {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 26px;
+}
+
+/* 颜色辅助类 */
+.text-success { color: #67c23a; }
+.bg-success-light { background: #f0f9eb; }
+.text-warning { color: #e6a23c; }
+.bg-warning-light { background: #fdf6ec; }
+.text-danger { color: #f56c6c; }
+.bg-danger-light { background: #fef0f0; }
+
+/* 图表区 */
+.charts-row {
+  margin-bottom: 24px;
+}
+.chart-card {
+  border-radius: 16px;
+  border: none;
+}
+.card-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #303133;
+}
+.trend-chart, .pie-chart {
+  width: 100%;
+  height: 300px;
+}
+
+/* 表格区 */
+.table-card {
+  border-radius: 16px;
+  border: none;
+}
+.hover-number {
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  border-bottom: 2px dashed;
+  padding-bottom: 2px;
+  display: inline-block;
+  min-width: 30px;
+}
+.gold-text {
+  font-family: monospace;
+  font-size: 16px;
+  font-weight: bold;
+  color: #e6a23c;
+  background: #fdf6ec;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.empty-number {
+  color: #c0c4cc;
+}
+
+/* 气泡列表项 */
+.popover-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #4c4c4c;
+}
+.popover-item:last-child {
+  border-bottom: none;
+}
+.crop-name {
+  color: #e5eaf3;
+}
+.crop-gold {
+  color: #e6a23c;
+  font-family: monospace;
+  font-weight: bold;
+}
+
+:deep(.el-table) {
+  --el-table-header-bg-color: #f7f9fc;
+  border-radius: 8px;
+  overflow: hidden;
+}
+</style>

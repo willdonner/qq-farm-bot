@@ -68,6 +68,10 @@ export function getAccountLogs(uin, limit = 500) {
   return api.get(`/accounts/${uin}/logs`, { params: { limit } })
 }
 
+export function getAccountStatistics(uin, hours = 24) {
+  return api.get(`/accounts/${uin}/statistics`, { params: { hours } })
+}
+
 // QR 登录
 export function startQrLogin(uin, opts = {}) {
   return api.post(`/accounts/${uin}/qr-login`, opts)

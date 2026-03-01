@@ -42,6 +42,12 @@ const routes = [
         props: true,
       },
       {
+        path: 'account/:uin/stats',
+        name: 'AccountStats',
+        component: () => import('../views/AccountStats.vue'),
+        props: true,
+      },
+      {
         path: 'admin/users',
         name: 'AdminUsers',
         component: () => import('../views/AdminUsers.vue'),

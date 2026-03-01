@@ -17,8 +17,9 @@ const { CONFIG, PlantPhase, PHASE_NAMES } = require('../src/config');
 const {
     getPlantNameBySeedId, getPlantName, getPlantExp,
     formatGrowTime, getPlantGrowTime, getItemName, getFruitName,
-    getPlantRanking,
+    getPlantRanking, getItemInfo
 } = require('../src/gameConfig');
+const db = require('./database');
 
 const seedShopData = require('../tools/seed-shop-merged-export.json');
 const FRUIT_ID_SET = new Set(
@@ -140,7 +141,7 @@ class BotInstance extends EventEmitter {
             autoWater: true,           // 自动浇水
             autoLandUnlock: true,      // 自动解锁新土地（开拓）
             autoLandUpgrade: true,     // 自动升级土地
-            
+
             // ========== 好友互动功能 ==========
             friendVisit: true,         // 访问好友农场
             autoSteal: true,           // 自动偷菜
@@ -148,12 +149,12 @@ class BotInstance extends EventEmitter {
             friendPest: true,          // 给好友放虫（损人）
             helpEvenExpFull: true,     // 经验满了也继续帮忙
             skipStealRadish: true,     // 偷菜时跳过白萝卜
-            
+
             // ========== 系统功能 ==========
             autoTask: true,            // 自动完成并领取任务
             autoSell: true,            // 自动卖出仓库作物
             autoBuyFertilizer: false,   // 自动购买化肥（金币）
-            
+
             // ========== 每日奖励功能 ==========
             autoFreeGifts: true,       // 商城免费礼包
             autoShareReward: true,     // 分享奖励
@@ -854,7 +855,7 @@ class BotInstance extends EventEmitter {
         const nowSec = this.getServerTimeSec();
         for (const land of lands) {
             const id = toNum(land.id);
-            
+
             // 未解锁的土地 → 检查是否可以解锁
             if (!land.unlocked) {
                 if (land.could_unlock) {
@@ -862,12 +863,12 @@ class BotInstance extends EventEmitter {
                 }
                 continue;
             }
-            
+
             // 已解锁的土地 → 检查是否可以升级
             if (land.could_upgrade) {
                 result.upgradable.push(id);
             }
-            
+
             const plant = land.plant;
             if (!plant || !plant.phases || plant.phases.length === 0) {
                 result.empty.push(id); continue;
@@ -952,11 +953,36 @@ class BotInstance extends EventEmitter {
             let harvestedLandIds = [];
             if (status.harvestable.length > 0) {
                 try {
-                    await this.harvest(status.harvestable);
+                    const reply = await this.harvest(status.harvestable);
                     actions.push(`🌽收获×${status.harvestable.length}`);
                     harvestedLandIds = [...status.harvestable];
                     this._checkDailyReset();
                     this.dailyStats.harvestCount += status.harvestable.length;
+
+                    // 记录统计数据 (按作物种类聚合)
+                    const cropCounts = {};
+                    if (reply.items && reply.items.length > 0) {
+                        for (const item of reply.items) {
+                            const itemId = toNum(item.id);
+                            const name = getFruitName(itemId) || `未知果实(${item.id})`;
+                            const count = toNum(item.count);
+                            const itemInfo = getItemInfo(itemId);
+                            const itemPrice = itemInfo && itemInfo.price ? itemInfo.price : 0;
+                            const gold = count * itemPrice;
+
+                            if (!cropCounts[name]) cropCounts[name] = { count: 0, gold: 0 };
+                            cropCounts[name].count += count;
+                            cropCounts[name].gold += gold;
+                        }
+                    } else {
+                        for (const info of status.harvestableInfo) {
+                            if (!cropCounts[info.name]) cropCounts[info.name] = { count: 0, gold: 0 };
+                            cropCounts[info.name].count += 1;
+                        }
+                    }
+                    for (const [name, data] of Object.entries(cropCounts)) {
+                        db.addStatistic(this.userId, 'harvest', data.count, name, data.gold);
+                    }
                 }
                 catch (e) { this.logWarn('收获', e.message); }
             }
@@ -1188,7 +1214,7 @@ class BotInstance extends EventEmitter {
     analyzeFriendLands(lands, myGid) {
         // 白萝卜植物ID列表
         const RADISH_PLANT_IDS = [2020002, 1020002];
-        
+
         const result = { stealable: [], stealableInfo: [], needWater: [], needWeed: [], needBug: [] };
         for (const land of lands) {
             const id = toNum(land.id);
@@ -1278,11 +1304,15 @@ class BotInstance extends EventEmitter {
         if (status.stealable.length > 0 && this.featureToggles.autoSteal) {
             let ok = 0;
             const stolenPlants = [];
+            const totalStolenItems = [];
             for (let i = 0; i < status.stealable.length; i++) {
                 try {
-                    await this.stealHarvest(gid, [status.stealable[i]]);
+                    const reply = await this.stealHarvest(gid, [status.stealable[i]]);
                     ok++;
                     if (status.stealableInfo[i]) stolenPlants.push(status.stealableInfo[i].name);
+                    if (reply.items && reply.items.length > 0) {
+                        totalStolenItems.push(...reply.items);
+                    }
                 } catch (e) { }
                 await sleep(100);
             }
@@ -1292,6 +1322,31 @@ class BotInstance extends EventEmitter {
                 totalActions.steal += ok;
                 this._checkDailyReset();
                 this.dailyStats.stealCount += ok;
+
+                // 记录偷菜统计数据 (按作物种类聚合)
+                const plantCounts = {};
+                if (totalStolenItems.length > 0) {
+                    for (const item of totalStolenItems) {
+                        const itemId = toNum(item.id);
+                        const name = getFruitName(itemId) || `未知果实(${item.id})`;
+                        const count = toNum(item.count);
+                        const itemInfo = getItemInfo(itemId);
+                        const itemPrice = itemInfo && itemInfo.price ? itemInfo.price : 0;
+                        const gold = count * itemPrice;
+
+                        if (!plantCounts[name]) plantCounts[name] = { count: 0, gold: 0 };
+                        plantCounts[name].count += count;
+                        plantCounts[name].gold += gold;
+                    }
+                } else {
+                    for (const name of stolenPlants) {
+                        if (!plantCounts[name]) plantCounts[name] = { count: 0, gold: 0 };
+                        plantCounts[name].count += 1;
+                    }
+                }
+                for (const [name, data] of Object.entries(plantCounts)) {
+                    db.addStatistic(this.userId, 'steal', data.count, `${friend.name}: ${name}`, data.gold);
+                }
             }
         }
 
@@ -1497,7 +1552,7 @@ class BotInstance extends EventEmitter {
     async _runDailyRewards() {
         if (this.status !== 'running') return;
         const toggles = this.featureToggles;
-        
+
         try {
             if (toggles.autoFreeGifts) await this._claimFreeGifts();
             await sleep(500);
@@ -1522,7 +1577,7 @@ class BotInstance extends EventEmitter {
     // --- 1. 商城免费礼包 ---
     async _claimFreeGifts(force = false) {
         if (!force && this._isDoneToday('freeGifts')) return 0;
-        
+
         try {
             // 获取商城列表 (slot_type=1 为普通商城)
             const reqBody = types.GetMallListBySlotTypeRequest.encode(
@@ -1576,7 +1631,7 @@ class BotInstance extends EventEmitter {
                 'gamepb.sharepb.ShareService', 'CheckCanShare', checkReq
             );
             const checkReply = types.CheckCanShareReply.decode(checkBody);
-            
+
             if (!checkReply.can_share) {
                 this._markDoneToday('share');
                 return false;
@@ -1780,7 +1835,7 @@ class BotInstance extends EventEmitter {
     async _buyOrganicFertilizer(force = false) {
         const COOLDOWN_MS = 10 * 60 * 1000; // 10分钟冷却
         const now = Date.now();
-        
+
         if (!force && now - this.lastFertilizerBuyAt < COOLDOWN_MS) return 0;
         if (!force && this._isDoneToday('fertilizerBuy')) return 0;
 
@@ -1826,7 +1881,7 @@ class BotInstance extends EventEmitter {
                     await sleep(100);
                 } catch (e) {
                     // 余额不足或其他错误
-                    if (e.message.includes('余额不足') || e.message.includes('点券不足') || 
+                    if (e.message.includes('余额不足') || e.message.includes('点券不足') ||
                         e.message.includes('1000019') || e.message.includes('不足')) {
                         break;
                     }
@@ -1838,7 +1893,7 @@ class BotInstance extends EventEmitter {
                 this.log('商城', `🧪 点券购买有机化肥 ×${totalBought}`);
                 this.lastFertilizerBuyAt = now;
             }
-            
+
             return totalBought;
         } catch (e) {
             return 0;
@@ -1887,7 +1942,7 @@ class BotInstance extends EventEmitter {
                 const id = toNum(it.id);
                 const count = toNum(it.count);
                 if (count <= 0) continue;
-                
+
                 // 1. 先使用化肥礼包
                 if (FERTILIZER_GIFT_IDS.has(id)) {
                     toUse.push({ id, count, isGift: true });
@@ -1923,7 +1978,7 @@ class BotInstance extends EventEmitter {
                     ).finish();
                     await this.sendMsgAsync('gamepb.itempb.ItemService', 'BatchUse', batchReq);
                     used += item.count;
-                    
+
                     // 更新容器计数
                     if (!item.isGift && item.type && item.hours) {
                         if (item.type === 'normal') containerHours.normal += item.count * item.hours;

@@ -139,10 +139,28 @@ async function initDatabase() {
         )
     `);
 
+    // 创建统计表
+    db.run(`
+        CREATE TABLE IF NOT EXISTS bot_statistics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_uin TEXT NOT NULL,
+            action TEXT NOT NULL,
+            amount INTEGER DEFAULT 0,
+            target TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    `);
+
+    // 尝试添加 gold 字段，兼容旧数据表
+    try {
+        db.run(`ALTER TABLE bot_statistics ADD COLUMN gold INTEGER DEFAULT 0`);
+    } catch (e) { }
+
     // 索引
     db.run(`CREATE INDEX IF NOT EXISTS idx_users_uin ON users(uin)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_logs_uin ON bot_logs(user_uin)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_logs_created ON bot_logs(created_at)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_stats_uin_created ON bot_statistics(user_uin, created_at)`);
 
     // 创建公告表
     db.run(`
@@ -256,7 +274,82 @@ function getRecentLogs(uin, limit = 100) {
 
 function cleanOldLogs(daysToKeep = 7) {
     run(`DELETE FROM bot_logs WHERE created_at < datetime('now', '-${daysToKeep} days', 'localtime')`);
+    run(`DELETE FROM bot_statistics WHERE created_at < datetime('now', '-${daysToKeep} days', 'localtime')`);
     saveToFile();
+}
+
+// ============ 统计持久化 ============
+
+function addStatistic(uin, action, amount, target = '', gold = 0) {
+    run(`INSERT INTO bot_statistics (user_uin, action, amount, target, gold) VALUES (?, ?, ?, ?, ?)`,
+        [uin, action, amount, target, gold]);
+}
+
+function getHourlyStatistics(uin, hoursLimit = 24) {
+    const rawStats = queryAll(
+        `SELECT 
+            strftime('%Y-%m-%d %H:00:00', created_at) as hour,
+            action,
+            target,
+            SUM(amount) as total_amount,
+            SUM(gold) as total_gold,
+            COUNT(id) as total_count
+         FROM bot_statistics
+         WHERE user_uin = ? AND created_at >= datetime('now', '-${hoursLimit} hours', 'localtime')
+         GROUP BY hour, action, target
+         ORDER BY hour ASC`,
+        [uin]
+    );
+
+    // 构建一个按小时划分的数据结构，以防某些小时没有数据
+    const result = [];
+    const now = new Date();
+    // 确保时间倒退计算是按整点
+    now.setMinutes(0, 0, 0);
+
+    const statsMap = new Map();
+    for (const row of rawStats) {
+        if (!statsMap.has(row.hour)) {
+            statsMap.set(row.hour, {
+                hour: row.hour,
+                harvest: { amount: 0, count: 0, gold: 0, details: [] },
+                steal: { amount: 0, count: 0, gold: 0, details: [] }
+            });
+        }
+        const hourData = statsMap.get(row.hour);
+        if (row.action === 'harvest' || row.action === 'steal') {
+            hourData[row.action].amount += row.total_amount || 0;
+            hourData[row.action].count += row.total_count || 0;
+            hourData[row.action].gold += row.total_gold || 0;
+            hourData[row.action].details.push({
+                name: row.target,
+                amount: row.total_amount || 0,
+                gold: row.total_gold || 0
+            });
+        }
+    }
+
+    // 生成最近 hoursLimit 小时的列表（包含0数据的空小时）
+    for (let i = hoursLimit - 1; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 60 * 60 * 1000);
+        // 本地格式化日期时间以匹配 SQLite 的 datetime('now', 'localtime') 格式（近似处理）
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hourStr = String(d.getHours()).padStart(2, '0');
+        const timeKey = `${year}-${month}-${day} ${hourStr}:00:00`;
+
+        if (statsMap.has(timeKey)) {
+            result.push(statsMap.get(timeKey));
+        } else {
+            result.push({
+                hour: timeKey,
+                harvest: { amount: 0, count: 0, gold: 0, details: [] },
+                steal: { amount: 0, count: 0, gold: 0, details: [] }
+            });
+        }
+    }
+    return result;
 }
 
 // ============ 自动启动用户列表 ============
@@ -372,4 +465,7 @@ module.exports = {
     // 公告
     getAnnouncement,
     saveAnnouncement,
+    // 统计
+    addStatistic,
+    getHourlyStatistics,
 };

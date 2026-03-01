@@ -87,6 +87,15 @@
           <el-icon :size="22"><Document /></el-icon>
           <span v-if="!sidebarCollapsed">日志</span>
         </div>
+        <div
+          class="nav-item"
+          :class="{ active: route.name === 'AccountStats', disabled: !currentUin }"
+          @click="currentUin && router.push(`/account/${currentUin}/stats`)"
+          title="统计"
+        >
+          <el-icon :size="22"><DataLine /></el-icon>
+          <span v-if="!sidebarCollapsed">统计</span>
+        </div>
 
         <template v-if="auth.isAdmin">
           <div class="nav-divider" v-if="!sidebarCollapsed">管理</div>
@@ -195,6 +204,9 @@
         <div class="nav-item" :class="{ active: route.name === 'AccountLogs', disabled: !currentUin }" @click="currentUin && goMobile(`/account/${currentUin}/logs`)">
           <el-icon :size="22"><Document /></el-icon><span>日志</span>
         </div>
+        <div class="nav-item" :class="{ active: route.name === 'AccountStats', disabled: !currentUin }" @click="currentUin && goMobile(`/account/${currentUin}/stats`)">
+          <el-icon :size="22"><DataLine /></el-icon><span>统计</span>
+        </div>
         <template v-if="auth.isAdmin">
           <div class="nav-divider">管理</div>
           <div class="nav-item" :class="{ active: route.name === 'AdminUsers' }" @click="goMobile('/admin/users')">
@@ -235,6 +247,7 @@ const pageTitle = computed(() => {
     AccountLands: '土地状态',
     AccountSettings: '参数配置',
     AccountLogs: '运行日志',
+    AccountStats: '统计明细',
     AdminUsers: '用户管理',
   }
   return titles[route.name] || 'QQ农场助手'

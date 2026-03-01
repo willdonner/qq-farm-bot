@@ -157,7 +157,7 @@ router.post('/accounts/add-by-code', async (req, res) => {
 router.get('/accounts', (req, res) => {
     try {
         let accounts = botManager.listAccounts();
-        
+
         // 获取当前用户的信息和权限列表
         const adminUser = db.getAdminUserById(req.user.id);
         const allowed = (adminUser?.allowed_uins || '')
@@ -192,20 +192,20 @@ router.get('/accounts', (req, res) => {
             const displayUin = isWx ? '微信用户' : a.uin;
 
             if (isOwn) {
-                return { 
-                    ...a, 
-                    isOwn: true, 
+                return {
+                    ...a,
+                    isOwn: true,
                     displayUin,
-                    avatar: avatarUrl 
+                    avatar: avatarUrl
                 };
             } else {
                 const maskedUin = isWx ? '微信用户' : (a.uin.slice(0, 3) + '****' + a.uin.slice(-2));
                 const maskedNick = a.nickname ? a.nickname.charAt(0) + '***' : '隐藏用户';
-                
+
                 return {
                     ...a,
                     uin: a.uin, // 保留真实uin用于前端key和路由
-                    displayUin: maskedUin, 
+                    displayUin: maskedUin,
                     nickname: maskedNick,
                     isOwn: false,
                     avatar: avatarUrl
@@ -425,6 +425,17 @@ router.get('/accounts/:uin/logs', canAccessUin, (req, res) => {
         const limit = parseInt(req.query.limit) || 100;
         const logs = botManager.getBotLogs(req.params.uin, limit);
         res.json({ ok: true, data: logs });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+/** GET /api/accounts/:uin/statistics?hours=24 */
+router.get('/accounts/:uin/statistics', canAccessUin, (req, res) => {
+    try {
+        const hours = parseInt(req.query.hours) || 24;
+        const stats = db.getHourlyStatistics(req.params.uin, hours);
+        res.json({ ok: true, data: stats });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
     }

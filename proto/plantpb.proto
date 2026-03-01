@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package gamepb.plantpb;
 
+import "corepb.proto";
+
 // ============ 生长阶段枚举 ============
 enum PlantPhase {
     PHASE_UNKNOWN = 0;
@@ -139,7 +141,7 @@ message HarvestRequest {
 
 message HarvestReply {
     repeated LandInfo land = 1;
-    // repeated Item items = 2;     // corepb.Item
+    repeated corepb.Item items = 2;     // corepb.Item
     // repeated Item lost_items = 3;
     repeated OperationLimit operation_limits = 4;
 }
