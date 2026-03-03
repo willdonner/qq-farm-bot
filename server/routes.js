@@ -442,6 +442,17 @@ router.get('/accounts/:uin/statistics', canAccessUin, (req, res) => {
     }
 });
 
+/** GET /api/accounts/:uin/daily-statistics?days=7 */
+router.get('/accounts/:uin/daily-statistics', canAccessUin, (req, res) => {
+    try {
+        const days = parseInt(req.query.days) || 7;
+        const stats = db.getDailyStatistics(req.params.uin, days);
+        res.json({ ok: true, data: stats });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // ============================================================
 //  管理员: 用户管理
 // ============================================================

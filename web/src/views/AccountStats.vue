@@ -174,12 +174,54 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 每日历史汇总表格 -->
+    <el-row :gutter="20" class="data-row" style="margin-top: 24px;">
+      <el-col :span="24">
+        <el-card shadow="never" class="table-card">
+          <template #header>
+            <div class="card-title">每日数据汇总 (最近 7 天)</div>
+          </template>
+          <el-table :data="dailyStatsData" style="width: 100%" stripe size="default">
+            <el-table-column prop="day" label="日期" width="120" align="center">
+              <template #default="scope">
+                <el-tag effect="light" type="success">{{ scope.row.day }}</el-tag>
+              </template>
+            </el-table-column>
+            
+            <el-table-column label="自己收获" align="center">
+              <el-table-column prop="harvest.amount" label="收获数量" width="100" align="center"></el-table-column>
+              <el-table-column prop="harvest.gold" label="收获收益" min-width="120" align="center">
+                <template #default="scope">
+                  <span class="gold-text">💰 {{ scope.row.harvest.gold }}</span>
+                </template>
+              </el-table-column>
+            </el-table-column>
+
+            <el-table-column label="外头偷菜" align="center">
+              <el-table-column prop="steal.amount" label="偷取数量" width="100" align="center"></el-table-column>
+              <el-table-column prop="steal.gold" label="偷菜收益" min-width="120" align="center">
+                <template #default="scope">
+                  <span class="gold-text">💰 {{ scope.row.steal.gold }}</span>
+                </template>
+              </el-table-column>
+            </el-table-column>
+
+            <el-table-column prop="totalGold" label="当日总计收益" min-width="140" align="right">
+              <template #default="scope">
+                <span class="total-gold-text">💰 {{ scope.row.totalGold }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { getAccountStatistics } from '../api/index.js'
+import { getAccountStatistics, getAccountDailyStatistics } from '../api/index.js'
 import { ElMessage } from 'element-plus'
 import { DataLine, Refresh, Apple, Coin, Scissor, Trophy } from '@element-plus/icons-vue'
 
@@ -196,16 +238,20 @@ use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, Legen
 const props = defineProps({ uin: String })
 const loading = ref(false)
 const statsData = ref([])
+const dailyStatsData = ref([])
 
 // 获取数据
 async function fetchData() {
   if (!props.uin) return
   loading.value = true
   try {
-    const res = await getAccountStatistics(props.uin, 24)
-    if (res.ok) {
-      statsData.value = res.data || []
-    }
+    const [hRes, dRes] = await Promise.all([
+      getAccountStatistics(props.uin, 24),
+      getAccountDailyStatistics(props.uin, 7)
+    ])
+    
+    if (hRes.ok) statsData.value = hRes.data || []
+    if (dRes.ok) dailyStatsData.value = dRes.data || []
   } catch (e) {
     ElMessage.error('获取统计数据失败: ' + e.message)
   } finally {
@@ -562,6 +608,13 @@ watch(() => props.uin, () => {
   font-family: monospace;
   font-weight: bold;
   white-space: nowrap;
+}
+
+.total-gold-text {
+  font-family: monospace;
+  font-size: 16px;
+  font-weight: 800;
+  color: #ff9800;
 }
 
 :deep(.el-table) {

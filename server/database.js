@@ -337,6 +337,7 @@ function getHourlyStatistics(uin, hoursLimit = 24) {
         }
     }
 
+
     // 生成最近 hoursLimit 小时的列表（包含0数据的空小时）
     for (let i = hoursLimit - 1; i >= 0; i--) {
         const d = new Date(now.getTime() - i * 60 * 60 * 1000);
@@ -358,6 +359,52 @@ function getHourlyStatistics(uin, hoursLimit = 24) {
         }
     }
     return result;
+}
+
+/** 获取按天汇总统计 */
+function getDailyStatistics(uin, daysLimit = 7) {
+    // 用 Node.js 计算起始日期（直接用本地日期，避免 SQLite datetime 的时区偏差）
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysLimit + 1);
+    startDate.setHours(0, 0, 0, 0);
+    const year = startDate.getFullYear();
+    const month = String(startDate.getMonth() + 1).padStart(2, '0');
+    const day = String(startDate.getDate()).padStart(2, '0');
+    const startDateStr = `${year}-${month}-${day}`;
+
+    const rawStats = queryAll(
+        `SELECT 
+            date(created_at) as day,
+            action,
+            SUM(amount) as total_amount,
+            SUM(gold) as total_gold
+         FROM bot_statistics
+         WHERE user_uin = ? AND date(created_at) >= ?
+         GROUP BY day, action
+         ORDER BY day DESC`,
+        [uin, startDateStr]
+    );
+
+    const result = [];
+    const dayMap = new Map();
+
+    for (const row of rawStats) {
+        if (!dayMap.has(row.day)) {
+            dayMap.set(row.day, {
+                day: row.day,
+                harvest: { amount: 0, gold: 0 },
+                steal: { amount: 0, gold: 0 },
+                totalGold: 0
+            });
+        }
+        const dayData = dayMap.get(row.day);
+        if (row.action === 'harvest' || row.action === 'steal') {
+            dayData[row.action].amount += row.total_amount || 0;
+            dayData[row.action].gold += row.total_gold || 0;
+            dayData.totalGold += row.total_gold || 0;
+        }
+    }
+    return Array.from(dayMap.values());
 }
 
 // ============ 自动启动用户列表 ============
@@ -476,4 +523,5 @@ module.exports = {
     // 统计
     addStatistic,
     getHourlyStatistics,
+    getDailyStatistics,
 };
