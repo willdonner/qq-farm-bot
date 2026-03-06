@@ -59,13 +59,21 @@ QQ 农场全自动挂机管理平台 — 多账号、可视化、实时控制
 |:---:|:---:|
 | ![账号管理](docs/images/dashboard.png) | ![账号主页](docs/images/account-home.png) |
 
-| 土地详情 | 设置 & 种植排行 |
+| 土地详情 | 统计报表 |
 |:---:|:---:|
-| ![土地详情](docs/images/account-lands.png) | ![设置页](docs/images/account-settings.png) |
+| ![土地详情](docs/images/account-lands.png) | ![统计报表](docs/images/count.png) |
 
-| 实时日志 | 用户管理 |
+| 实时日志 | 种植排行 |
 |:---:|:---:|
-| ![日志页](docs/images/account-logs.png) | ![用户管理](docs/images/admin-users.png) |
+| ![日志页](docs/images/account-logs.png) | ![设置页](docs/images/account-settings.png) |
+
+| 通知设置 | 邮件通知 |
+|:---:|:---:|
+| ![通知设置](docs/images/email-notify-report.png) | ![邮件通知](docs/images/email-notify.png) |
+
+| 定时汇报邮件 | 用户管理 |
+|:---:|:---:|
+| ![定时汇报邮件](docs/images/hours-report.png) | ![用户管理](docs/images/admin-users.png) |
 ---
 ## 技术栈
 
